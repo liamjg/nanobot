@@ -93,8 +93,13 @@ class LLMProvider(ABC):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        min_p: float | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
         reasoning_effort: str | None = None,
     ) -> LLMResponse:
         """

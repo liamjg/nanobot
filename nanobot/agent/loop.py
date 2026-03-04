@@ -9,7 +9,7 @@ import weakref
 from contextlib import AsyncExitStack
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 from loguru import logger
 
@@ -54,10 +54,7 @@ class AgentLoop:
         workspace: Path,
         model: str | None = None,
         max_iterations: int = 40,
-        temperature: float = 0.1,
-        max_tokens: int = 4096,
         memory_window: int = 100,
-        reasoning_effort: str | None = None,
         brave_api_key: str | None = None,
         web_proxy: str | None = None,
         exec_config: ExecToolConfig | None = None,
@@ -75,10 +72,7 @@ class AgentLoop:
         self.workspace = workspace
         self.model = model or provider.get_default_model()
         self.max_iterations = max_iterations
-        self.temperature = temperature
-        self.max_tokens = max_tokens
         self.memory_window = memory_window
-        self.reasoning_effort = reasoning_effort
         self.brave_api_key = brave_api_key
         self.web_proxy = web_proxy
         self.exec_config = exec_config or ExecToolConfig()
@@ -93,9 +87,6 @@ class AgentLoop:
             workspace=workspace,
             bus=bus,
             model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            reasoning_effort=reasoning_effort,
             brave_api_key=brave_api_key,
             web_proxy=web_proxy,
             exec_config=self.exec_config,
@@ -211,9 +202,6 @@ class AgentLoop:
                 messages=messages,
                 tools=self.tools.get_definitions(),
                 model=model,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                reasoning_effort=self.reasoning_effort,
             )
 
             if response.has_tool_calls:

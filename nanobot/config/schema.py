@@ -217,28 +217,16 @@ class ChannelsConfig(Base):
     matrix: MatrixConfig = Field(default_factory=MatrixConfig)
 
 
-class AgentDefaults(Base):
-    """Default agent configuration."""
-
-    workspace: str = "~/.nanobot/workspace"
-    max_tokens: int = 8192
-    temperature: float = 0.1
-    max_tool_iterations: int = 40
-    memory_window: int = 100
-    reasoning_effort: str | None = None  # low / medium / high — enables LLM thinking mode
-
-
-class AgentsConfig(Base):
-    """Agent configuration."""
-
-    defaults: AgentDefaults = Field(default_factory=AgentDefaults)
-
-
 class ModelEndpoint(Base):
     provider: str
     model: str
     max_tokens: int | None = None
     temperature: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    min_p: float | None = None
+    frequency_penalty: float | None = None
+    presence_penalty: float | None = None
     reasoning_effort: str | None = None
 
 
@@ -257,6 +245,13 @@ class RoutingRule(Base):
 class RoutingConfig(Base):
     models: dict[str, ModelEndpoint] = Field(default_factory=dict)
     rules: list[RoutingRule] = Field(default_factory=list)
+
+
+class AgentsConfig(Base):
+    workspace: str = "~/.nanobot/workspace"
+    max_tool_iterations: int = 40
+    memory_window: int = 100
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
 
 
 class ProviderConfig(Base):
@@ -353,11 +348,10 @@ class Config(BaseSettings):
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
-    routing: RoutingConfig = Field(default_factory=RoutingConfig)
 
     @property
     def workspace_path(self) -> Path:
         """Get expanded workspace path."""
-        return Path(self.agents.defaults.workspace).expanduser()
+        return Path(self.agents.workspace).expanduser()
 
     model_config = ConfigDict(env_prefix="NANOBOT_", env_nested_delimiter="__")

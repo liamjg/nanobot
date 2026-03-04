@@ -183,23 +183,15 @@ class LiteLLMProvider(LLMProvider):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        min_p: float | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
         reasoning_effort: str | None = None,
     ) -> LLMResponse:
-        """
-        Send a chat completion request via LiteLLM.
-
-        Args:
-            messages: List of message dicts with 'role' and 'content'.
-            tools: Optional list of tool definitions in OpenAI format.
-            model: Model identifier (e.g., 'anthropic/claude-sonnet-4-5').
-            max_tokens: Maximum tokens in response.
-            temperature: Sampling temperature.
-
-        Returns:
-            LLMResponse with content and/or tool calls.
-        """
         original_model = model or self.default_model
         model = self._resolve_model(original_model)
         extra_msg_keys = self._extra_msg_keys(original_model, model)
@@ -207,36 +199,38 @@ class LiteLLMProvider(LLMProvider):
         if self._supports_cache_control(original_model):
             messages, tools = self._apply_cache_control(messages, tools)
 
-        # Clamp max_tokens to at least 1 — negative or zero values cause
-        # LiteLLM to reject the request with "max_tokens must be at least 1".
-        max_tokens = max(1, max_tokens)
-
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": self._sanitize_messages(self._sanitize_empty_content(messages), extra_keys=extra_msg_keys),
-            "max_tokens": max_tokens,
-            "temperature": temperature,
         }
+
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max(1, max_tokens)
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if top_p is not None:
+            kwargs["top_p"] = top_p
+        if top_k is not None:
+            kwargs["top_k"] = top_k
+        if min_p is not None:
+            kwargs["min_p"] = min_p
+        if frequency_penalty is not None:
+            kwargs["frequency_penalty"] = frequency_penalty
+        if presence_penalty is not None:
+            kwargs["presence_penalty"] = presence_penalty
+        if reasoning_effort:
+            kwargs["reasoning_effort"] = reasoning_effort
 
         # Apply model-specific overrides (e.g. kimi-k2.5 temperature)
         self._apply_model_overrides(model, kwargs)
 
-        # Pass api_key directly — more reliable than env vars alone
         if self.api_key:
             kwargs["api_key"] = self.api_key
-
-        # Pass api_base for custom endpoints
         if self.api_base:
             kwargs["api_base"] = self.api_base
-
-        # Pass extra headers (e.g. APP-Code for AiHubMix)
         if self.extra_headers:
             kwargs["extra_headers"] = self.extra_headers
-        
-        if reasoning_effort:
-            kwargs["reasoning_effort"] = reasoning_effort
-            kwargs["drop_params"] = True
-        
+
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"

@@ -199,27 +199,35 @@ def onboard():
 
 
 def _default_onboard_config() -> Config:
-    from nanobot.config.schema import ModelEndpoint, RoutingCondition, RoutingConfig, RoutingRule
+    from nanobot.config.schema import (
+        AgentsConfig,
+        ModelEndpoint,
+        RoutingCondition,
+        RoutingConfig,
+        RoutingRule,
+    )
 
     return Config(
-        routing=RoutingConfig(
-            models={
-                "default": ModelEndpoint(provider="openrouter", model="anthropic/claude-sonnet-4"),
-                "fast": ModelEndpoint(provider="openrouter", model="meta-llama/llama-3.3-70b-instruct"),
-            },
-            rules=[
-                RoutingRule(use="fast", when=RoutingCondition(keywords=["hi", "hello", "hey"], max_length=50)),
-            ],
+        agents=AgentsConfig(
+            routing=RoutingConfig(
+                models={
+                    "default": ModelEndpoint(provider="openrouter", model="anthropic/claude-sonnet-4"),
+                    "fast": ModelEndpoint(provider="openrouter", model="meta-llama/llama-3.3-70b-instruct"),
+                },
+                rules=[
+                    RoutingRule(use="fast", when=RoutingCondition(keywords=["hi", "hello", "hey"], max_length=50)),
+                ],
+            ),
         ),
     )
 
 
 def _get_effective_model(config: Config) -> str:
-    if not config.routing.models:
+    if not config.agents.routing.models:
         console.print("[red]Error: No models configured in routing section.[/red]")
         console.print("Run [cyan]nanobot onboard[/cyan] to set up configuration.")
         raise typer.Exit(1)
-    if "default" not in config.routing.models:
+    if "default" not in config.agents.routing.models:
         console.print("[red]Error: routing.models must include a 'default' entry.[/red]")
         raise typer.Exit(1)
     return "hint:default"
@@ -237,7 +245,7 @@ def _make_route_provider(config: Config):
     from nanobot.providers.registry import find_by_name
     from nanobot.providers.router_provider import RouterProvider
 
-    routing = config.routing
+    routing = config.agents.routing
     providers_seen: dict[str, int] = {}
     provider_list: list[tuple[str, object]] = []
     routes: dict[str, tuple[int, str]] = {}
@@ -273,12 +281,11 @@ def _make_route_provider(config: Config):
         routes[name] = (idx, endpoint.model)
 
         overrides = {}
-        if endpoint.max_tokens is not None:
-            overrides["max_tokens"] = endpoint.max_tokens
-        if endpoint.temperature is not None:
-            overrides["temperature"] = endpoint.temperature
-        if endpoint.reasoning_effort is not None:
-            overrides["reasoning_effort"] = endpoint.reasoning_effort
+        for attr in ("max_tokens", "temperature", "top_p", "top_k", "min_p",
+                      "frequency_penalty", "presence_penalty", "reasoning_effort"):
+            val = getattr(endpoint, attr)
+            if val is not None:
+                overrides[attr] = val
         if overrides:
             route_overrides[name] = overrides
 
@@ -336,11 +343,8 @@ def gateway(
         provider=provider,
         workspace=config.workspace_path,
         model=_get_effective_model(config),
-        temperature=config.agents.defaults.temperature,
-        max_tokens=config.agents.defaults.max_tokens,
-        max_iterations=config.agents.defaults.max_tool_iterations,
-        memory_window=config.agents.defaults.memory_window,
-        reasoning_effort=config.agents.defaults.reasoning_effort,
+        max_iterations=config.agents.max_tool_iterations,
+        memory_window=config.agents.memory_window,
         brave_api_key=config.tools.web.search.api_key or None,
         web_proxy=config.tools.web.proxy or None,
         exec_config=config.tools.exec,
@@ -349,7 +353,7 @@ def gateway(
         session_manager=session_manager,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
-        routing_config=config.routing if config.routing.models else None,
+        routing_config=config.agents.routing if config.agents.routing.models else None,
     )
 
     # Set cron callback (needs agent)
@@ -520,11 +524,8 @@ def agent(
         provider=provider,
         workspace=config.workspace_path,
         model=_get_effective_model(config),
-        temperature=config.agents.defaults.temperature,
-        max_tokens=config.agents.defaults.max_tokens,
-        max_iterations=config.agents.defaults.max_tool_iterations,
-        memory_window=config.agents.defaults.memory_window,
-        reasoning_effort=config.agents.defaults.reasoning_effort,
+        max_iterations=config.agents.max_tool_iterations,
+        memory_window=config.agents.memory_window,
         brave_api_key=config.tools.web.search.api_key or None,
         web_proxy=config.tools.web.proxy or None,
         exec_config=config.tools.exec,
@@ -532,7 +533,7 @@ def agent(
         restrict_to_workspace=config.tools.restrict_to_workspace,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
-        routing_config=config.routing if config.routing.models else None,
+        routing_config=config.agents.routing if config.agents.routing.models else None,
     )
 
     # Show spinner when logs are off (no output to miss); skip when logs are on
@@ -864,8 +865,8 @@ def status():
     if config_path.exists():
         from nanobot.providers.registry import PROVIDERS
 
-        if config.routing.models and "default" in config.routing.models:
-            d = config.routing.models["default"]
+        if config.agents.routing.models and "default" in config.agents.routing.models:
+            d = config.agents.routing.models["default"]
             console.print(f"Model: {d.model} (via {d.provider})")
         else:
             console.print("Model: [red]not configured[/red]")

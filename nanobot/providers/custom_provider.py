@@ -18,14 +18,28 @@ class CustomProvider(LLMProvider):
         self._client = AsyncOpenAI(api_key=api_key, base_url=api_base)
 
     async def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
-                   model: str | None = None, max_tokens: int = 4096, temperature: float = 0.7,
+                   model: str | None = None, max_tokens: int | None = None, temperature: float | None = None,
+                   top_p: float | None = None, top_k: int | None = None, min_p: float | None = None,
+                   frequency_penalty: float | None = None, presence_penalty: float | None = None,
                    reasoning_effort: str | None = None) -> LLMResponse:
         kwargs: dict[str, Any] = {
             "model": model or self.default_model,
             "messages": self._sanitize_empty_content(messages),
-            "max_tokens": max(1, max_tokens),
-            "temperature": temperature,
         }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max(1, max_tokens)
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if top_p is not None:
+            kwargs["top_p"] = top_p
+        if top_k is not None:
+            kwargs["top_k"] = top_k
+        if min_p is not None:
+            kwargs["min_p"] = min_p
+        if frequency_penalty is not None:
+            kwargs["frequency_penalty"] = frequency_penalty
+        if presence_penalty is not None:
+            kwargs["presence_penalty"] = presence_penalty
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
         if tools:

@@ -47,9 +47,7 @@ class RouterProvider(LLMProvider):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.7,
-        reasoning_effort: str | None = None,
+        **kwargs: Any,
     ) -> LLMResponse:
         effective_model = model or self._default_model
         provider_idx, resolved_model, overrides = self._resolve(effective_model)
@@ -61,9 +59,7 @@ class RouterProvider(LLMProvider):
             messages=messages,
             tools=tools,
             model=resolved_model,
-            max_tokens=overrides.get("max_tokens", max_tokens),
-            temperature=overrides.get("temperature", temperature),
-            reasoning_effort=overrides.get("reasoning_effort", reasoning_effort),
+            **overrides,
         )
 
     def get_default_model(self) -> str:

@@ -11,14 +11,8 @@ class MockProvider(LLMProvider):
         self._default_model = default_model
         self.calls: list[dict] = []
 
-    async def chat(self, messages, tools=None, model=None, max_tokens=4096,
-                   temperature=0.7, reasoning_effort=None):
-        self.calls.append({
-            "model": model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "reasoning_effort": reasoning_effort,
-        })
+    async def chat(self, messages, tools=None, model=None, **kwargs):
+        self.calls.append({"model": model, **kwargs})
         return LLMResponse(content=f"response-from-{self._name}")
 
     def get_default_model(self):
@@ -76,17 +70,33 @@ async def test_non_hint_model_uses_default():
 async def test_route_overrides_applied():
     overrides = {"reasoning": {"max_tokens": 16384, "temperature": 0.3}}
     router, fast, smart = _make_router(overrides=overrides)
-    await router.chat([], model="hint:reasoning", max_tokens=4096, temperature=0.7)
+    await router.chat([], model="hint:reasoning")
     assert smart.calls[0]["max_tokens"] == 16384
     assert smart.calls[0]["temperature"] == 0.3
 
 
 @pytest.mark.asyncio
-async def test_route_overrides_not_applied_to_unmatched():
+async def test_route_without_overrides_passes_no_extra_params():
     overrides = {"reasoning": {"max_tokens": 16384}}
     router, fast, smart = _make_router(overrides=overrides)
-    await router.chat([], model="hint:fast", max_tokens=4096)
-    assert fast.calls[0]["max_tokens"] == 4096
+    await router.chat([], model="hint:fast")
+    assert "max_tokens" not in fast.calls[0]
+    assert "temperature" not in fast.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_new_sampling_params_forwarded():
+    overrides = {"reasoning": {
+        "top_p": 0.9, "top_k": 40, "min_p": 0.05,
+        "frequency_penalty": 0.5, "presence_penalty": 0.3,
+    }}
+    router, fast, smart = _make_router(overrides=overrides)
+    await router.chat([], model="hint:reasoning")
+    assert smart.calls[0]["top_p"] == 0.9
+    assert smart.calls[0]["top_k"] == 40
+    assert smart.calls[0]["min_p"] == 0.05
+    assert smart.calls[0]["frequency_penalty"] == 0.5
+    assert smart.calls[0]["presence_penalty"] == 0.3
 
 
 def test_get_default_model():
