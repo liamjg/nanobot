@@ -22,18 +22,15 @@ class RouterProvider(LLMProvider):
         self._default_model = default_model
         self._route_overrides = route_overrides or {}
 
-        if default_model in self._routes:
-            self._default_index = self._routes[default_model][0]
-        else:
-            logger.warning("Default model '{}' not found in routes, using first provider", default_model)
-            self._default_index = 0
+        if default_model not in self._routes:
+            raise ValueError(f"Default model '{default_model}' not found in routes: {list(self._routes)}")
 
     def _resolve(self, model: str) -> tuple[int, str, dict[str, Any]]:
-        if model in self._routes:
-            idx, resolved_model = self._routes[model]
-            overrides = self._route_overrides.get(model, {})
-            return idx, resolved_model, overrides
-        return self._default_index, model, {}
+        if model not in self._routes:
+            raise ValueError(f"Unknown route '{model}', valid routes: {list(self._routes)}")
+        idx, resolved_model = self._routes[model]
+        overrides = self._route_overrides.get(model, {})
+        return idx, resolved_model, overrides
 
     async def chat(
         self,

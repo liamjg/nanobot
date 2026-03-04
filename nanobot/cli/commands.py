@@ -292,6 +292,9 @@ def _make_route_provider(config: Config):
     if not routes:
         console.print("[red]Error: No valid model endpoints resolved from routing.models.[/red]")
         raise typer.Exit(1)
+    if "default" not in routes:
+        console.print("[red]Error: 'default' model provider has no API key configured.[/red]")
+        raise typer.Exit(1)
 
     return RouterProvider(
         providers=provider_list,
