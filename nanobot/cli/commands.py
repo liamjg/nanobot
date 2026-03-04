@@ -157,7 +157,6 @@ def main(
 def onboard():
     """Initialize nanobot configuration and workspace."""
     from nanobot.config.loader import get_config_path, load_config, save_config
-    from nanobot.config.schema import Config
     from nanobot.utils.helpers import get_workspace_path
 
     config_path = get_config_path()
@@ -167,7 +166,7 @@ def onboard():
         console.print("  [bold]y[/bold] = overwrite with defaults (existing values will be lost)")
         console.print("  [bold]N[/bold] = refresh config, keeping existing values and adding new fields")
         if typer.confirm("Overwrite?"):
-            config = Config()
+            config = _default_onboard_config()
             save_config(config)
             console.print(f"[green]✓[/green] Config reset to defaults at {config_path}")
         else:
@@ -175,7 +174,7 @@ def onboard():
             save_config(config)
             console.print(f"[green]✓[/green] Config refreshed at {config_path} (existing values preserved)")
     else:
-        save_config(Config())
+        save_config(_default_onboard_config())
         console.print(f"[green]✓[/green] Created config at {config_path}")
 
     # Create workspace
@@ -189,70 +188,53 @@ def onboard():
 
     console.print(f"\n{__logo__} nanobot is ready!")
     console.print("\nNext steps:")
-    console.print("  1. Add your API key to [cyan]~/.nanobot/config.json[/cyan]")
+    console.print("  1. Add your OpenRouter API key to [cyan]~/.nanobot/config.json[/cyan]")
     console.print("     Get one at: https://openrouter.ai/keys")
     console.print("  2. Chat: [cyan]nanobot agent -m \"Hello!\"[/cyan]")
-    console.print("\n[dim]Want Telegram/WhatsApp? See: https://github.com/HKUDS/nanobot#-chat-apps[/dim]")
+    console.print("\n[dim]Model routing is pre-configured — customize the routing section to add models and rules.[/dim]")
+    console.print("[dim]Want Telegram/WhatsApp? See: https://github.com/HKUDS/nanobot#-chat-apps[/dim]")
 
 
 
+
+
+def _default_onboard_config() -> Config:
+    from nanobot.config.schema import ModelEndpoint, RoutingCondition, RoutingConfig, RoutingRule
+
+    return Config(
+        routing=RoutingConfig(
+            models={
+                "default": ModelEndpoint(provider="openrouter", model="anthropic/claude-sonnet-4"),
+                "fast": ModelEndpoint(provider="openrouter", model="meta-llama/llama-3.3-70b-instruct"),
+            },
+            rules=[
+                RoutingRule(use="fast", when=RoutingCondition(keywords=["hi", "hello", "hey"], max_length=50)),
+            ],
+        ),
+    )
 
 
 def _get_effective_model(config: Config) -> str:
-    if config.routing.models:
-        if "default" not in config.routing.models:
-            console.print("[red]Error: routing.models must include a 'default' entry.[/red]")
-            raise typer.Exit(1)
-        return "hint:default"
-    return config.agents.defaults.model
+    if not config.routing.models:
+        console.print("[red]Error: No models configured in routing section.[/red]")
+        console.print("Run [cyan]nanobot onboard[/cyan] to set up configuration.")
+        raise typer.Exit(1)
+    if "default" not in config.routing.models:
+        console.print("[red]Error: routing.models must include a 'default' entry.[/red]")
+        raise typer.Exit(1)
+    return "hint:default"
 
 
 def _make_provider(config: Config):
     """Create the appropriate LLM provider from config."""
-    from nanobot.providers.custom_provider import CustomProvider
-    from nanobot.providers.litellm_provider import LiteLLMProvider
-    from nanobot.providers.openai_codex_provider import OpenAICodexProvider
-
-    if config.routing.models:
-        return _make_route_provider(config)
-
-    model = config.agents.defaults.model
-    provider_name = config.get_provider_name(model)
-    p = config.get_provider(model)
-
-    # OpenAI Codex (OAuth)
-    if provider_name == "openai_codex" or model.startswith("openai-codex/"):
-        return OpenAICodexProvider(default_model=model)
-
-    # Custom: direct OpenAI-compatible endpoint, bypasses LiteLLM
-    if provider_name == "custom":
-        return CustomProvider(
-            api_key=p.api_key if p else "no-key",
-            api_base=config.get_api_base(model) or "http://localhost:8000/v1",
-            default_model=model,
-        )
-
-    from nanobot.providers.registry import find_by_name, find_by_model
-    spec = find_by_name(provider_name) or find_by_model(model)
-    has_key = (p and p.api_key) or (spec and spec.env_key and os.environ.get(spec.env_key))
-    if not model.startswith("bedrock/") and not has_key and not (spec and spec.is_oauth):
-        console.print("[red]Error: No API key configured.[/red]")
-        console.print("Set one in ~/.nanobot/config.json under providers section")
-        raise typer.Exit(1)
-
-    return LiteLLMProvider(
-        api_key=p.api_key if p else None,
-        api_base=config.get_api_base(model),
-        default_model=model,
-        extra_headers=p.extra_headers if p else None,
-        provider_name=provider_name,
-    )
+    return _make_route_provider(config)
 
 
 def _make_route_provider(config: Config):
     from loguru import logger
 
     from nanobot.providers.litellm_provider import LiteLLMProvider
+    from nanobot.providers.registry import find_by_name
     from nanobot.providers.router_provider import RouterProvider
 
     routing = config.routing
@@ -270,9 +252,14 @@ def _make_route_provider(config: Config):
                     name, endpoint.provider,
                 )
                 continue
+            api_base = p_config.api_base
+            if not api_base:
+                spec = find_by_name(endpoint.provider)
+                if spec and spec.is_gateway and spec.default_api_base:
+                    api_base = spec.default_api_base
             routed_provider = LiteLLMProvider(
                 api_key=p_config.api_key,
-                api_base=p_config.api_base or config.get_api_base(endpoint.model),
+                api_base=api_base,
                 default_model=endpoint.model,
                 extra_headers=p_config.extra_headers,
                 provider_name=endpoint.provider,
@@ -877,7 +864,11 @@ def status():
     if config_path.exists():
         from nanobot.providers.registry import PROVIDERS
 
-        console.print(f"Model: {config.agents.defaults.model}")
+        if config.routing.models and "default" in config.routing.models:
+            d = config.routing.models["default"]
+            console.print(f"Model: {d.model} (via {d.provider})")
+        else:
+            console.print("Model: [red]not configured[/red]")
 
         # Check API keys from registry
         for spec in PROVIDERS:

@@ -6,7 +6,6 @@ import pytest
 from typer.testing import CliRunner
 
 from nanobot.cli.commands import app
-from nanobot.config.schema import Config
 from nanobot.providers.litellm_provider import LiteLLMProvider
 from nanobot.providers.openai_codex_provider import _strip_model_prefix
 from nanobot.providers.registry import find_by_model
@@ -95,19 +94,6 @@ def test_onboard_existing_workspace_safe_create(mock_paths):
     assert "Created AGENTS.md" in result.stdout
     assert (workspace_dir / "AGENTS.md").exists()
 
-
-def test_config_matches_github_copilot_codex_with_hyphen_prefix():
-    config = Config()
-    config.agents.defaults.model = "github-copilot/gpt-5.3-codex"
-
-    assert config.get_provider_name() == "github_copilot"
-
-
-def test_config_matches_openai_codex_with_hyphen_prefix():
-    config = Config()
-    config.agents.defaults.model = "openai-codex/gpt-5.1-codex"
-
-    assert config.get_provider_name() == "openai_codex"
 
 
 def test_find_by_model_prefers_explicit_prefix_over_generic_codex_keyword():
