@@ -247,15 +247,10 @@ class RoutingConfig(Base):
     rules: list[RoutingRule] = Field(default_factory=list)
 
 
-class ConsolidationConfig(Base):
-    model: str | None = None
-
-
 class AgentsConfig(Base):
     workspace: str = "~/.nanobot/workspace"
     max_tool_iterations: int = 40
     memory_window: int = 100
-    consolidation: ConsolidationConfig = Field(default_factory=ConsolidationConfig)
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
 
 

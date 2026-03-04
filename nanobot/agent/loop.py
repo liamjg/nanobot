@@ -64,7 +64,6 @@ class AgentLoop:
         mcp_servers: dict | None = None,
         channels_config: ChannelsConfig | None = None,
         routing_config: RoutingConfig | None = None,
-        consolidation_model: str | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig
         self.bus = bus
@@ -95,7 +94,6 @@ class AgentLoop:
         )
 
         self.routing_config = routing_config
-        self.consolidation_model = consolidation_model
 
         self._running = False
         self._mcp_servers = mcp_servers or {}
@@ -513,7 +511,7 @@ class AgentLoop:
 
     async def _consolidate_memory(self, session, archive_all: bool = False) -> bool:
         """Delegate to MemoryStore.consolidate(). Returns True on success."""
-        model = self.consolidation_model or self.model
+        model = "consolidation" if (self.routing_config and "consolidation" in self.routing_config.models) else self.model
         return await MemoryStore(self.workspace).consolidate(
             session, self.provider, model,
             archive_all=archive_all, memory_window=self.memory_window,

@@ -349,7 +349,6 @@ def gateway(
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         routing_config=config.agents.routing if config.agents.routing.models else None,
-        consolidation_model=config.agents.consolidation.model,
     )
 
     # Set cron callback (needs agent)
@@ -530,7 +529,6 @@ def agent(
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         routing_config=config.agents.routing if config.agents.routing.models else None,
-        consolidation_model=config.agents.consolidation.model,
     )
 
     # Show spinner when logs are off (no output to miss); skip when logs are on
