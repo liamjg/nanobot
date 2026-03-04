@@ -7,6 +7,7 @@ import json
 import re
 import weakref
 from contextlib import AsyncExitStack
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
@@ -277,6 +278,17 @@ class AgentLoop:
         await self._connect_mcp()
         logger.info("Agent loop started")
 
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        memory = self.context.memory
+        content = memory.read_long_term()
+        tag = "Last Restarted: "
+        new_line = f"{tag}{now}"
+        if tag in content:
+            content = re.sub(rf"^{re.escape(tag)}.*$", new_line, content, flags=re.MULTILINE)
+        else:
+            content = content.rstrip() + "\n\n" + new_line + "\n" if content else new_line + "\n"
+        memory.write_long_term(content)
+
         while self._running:
             try:
                 msg = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
@@ -471,7 +483,6 @@ class AgentLoop:
 
     def _save_turn(self, session: Session, messages: list[dict], skip: int) -> None:
         """Save new-turn messages into session, truncating large tool results."""
-        from datetime import datetime
         for m in messages[skip:]:
             entry = dict(m)
             role, content = entry.get("role"), entry.get("content")
