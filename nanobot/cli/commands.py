@@ -232,9 +232,10 @@ def _make_provider(config: Config):
             default_model=model,
         )
 
-    from nanobot.providers.registry import find_by_name
-    spec = find_by_name(provider_name)
-    if not model.startswith("bedrock/") and not (p and p.api_key) and not (spec and spec.is_oauth):
+    from nanobot.providers.registry import find_by_name, find_by_model
+    spec = find_by_name(provider_name) or find_by_model(model)
+    has_key = (p and p.api_key) or (spec and spec.env_key and os.environ.get(spec.env_key))
+    if not model.startswith("bedrock/") and not has_key and not (spec and spec.is_oauth):
         console.print("[red]Error: No API key configured.[/red]")
         console.print("Set one in ~/.nanobot/config.json under providers section")
         raise typer.Exit(1)
