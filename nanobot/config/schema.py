@@ -248,7 +248,7 @@ class RoutingConfig(Base):
 
 
 class ConsolidationConfig(Base):
-    model: ModelEndpoint | None = None
+    model: str | None = None
 
 
 class AgentsConfig(Base):
