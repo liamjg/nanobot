@@ -64,6 +64,7 @@ class AgentLoop:
         mcp_servers: dict | None = None,
         channels_config: ChannelsConfig | None = None,
         routing_config: RoutingConfig | None = None,
+        consolidation_model: str | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig
         self.bus = bus
@@ -94,6 +95,7 @@ class AgentLoop:
         )
 
         self.routing_config = routing_config
+        self.consolidation_model = consolidation_model
 
         self._running = False
         self._mcp_servers = mcp_servers or {}
@@ -222,6 +224,12 @@ class AgentLoop:
                     }
                     for tc in response.tool_calls
                 ]
+                # Strip thinking from previous assistant messages — the API only
+                # requires thinking blocks on the *last* assistant message.
+                for m in messages:
+                    if m.get("role") == "assistant":
+                        m.pop("reasoning_content", None)
+                        m.pop("thinking_blocks", None)
                 messages = self.context.add_assistant_message(
                     messages, response.content, tool_call_dicts,
                     reasoning_content=response.reasoning_content,
@@ -505,8 +513,9 @@ class AgentLoop:
 
     async def _consolidate_memory(self, session, archive_all: bool = False) -> bool:
         """Delegate to MemoryStore.consolidate(). Returns True on success."""
+        model = self.consolidation_model or self.model
         return await MemoryStore(self.workspace).consolidate(
-            session, self.provider, self.model,
+            session, self.provider, model,
             archive_all=archive_all, memory_window=self.memory_window,
         )
 

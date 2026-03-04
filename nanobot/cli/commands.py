@@ -284,6 +284,38 @@ def _make_route_provider(config: Config):
         if overrides:
             route_overrides[name] = overrides
 
+    cons_endpoint = config.agents.consolidation.model
+    if cons_endpoint:
+        if cons_endpoint.provider not in providers_seen:
+            p_config = getattr(config.providers, cons_endpoint.provider, None)
+            api_key = (p_config and p_config.api_key) or ""
+            api_base = (p_config and p_config.api_base) or None
+            if not api_base:
+                spec = find_by_name(cons_endpoint.provider)
+                if spec and spec.is_gateway and spec.default_api_base:
+                    api_base = spec.default_api_base
+            routed_provider = LiteLLMProvider(
+                api_key=api_key,
+                api_base=api_base,
+                default_model=cons_endpoint.model,
+                extra_headers=(p_config and p_config.extra_headers),
+                provider_name=cons_endpoint.provider,
+            )
+            idx = len(provider_list)
+            providers_seen[cons_endpoint.provider] = idx
+            provider_list.append((cons_endpoint.provider, routed_provider))
+        else:
+            idx = providers_seen[cons_endpoint.provider]
+        routes["consolidation"] = (idx, cons_endpoint.model)
+        overrides = {}
+        for attr in ("max_tokens", "temperature", "top_p", "top_k", "min_p",
+                      "frequency_penalty", "presence_penalty", "reasoning_effort"):
+            val = getattr(cons_endpoint, attr)
+            if val is not None:
+                overrides[attr] = val
+        if overrides:
+            route_overrides["consolidation"] = overrides
+
     if not routes:
         console.print("[red]Error: No models configured in routing section.[/red]")
         raise typer.Exit(1)
@@ -349,6 +381,7 @@ def gateway(
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         routing_config=config.agents.routing if config.agents.routing.models else None,
+        consolidation_model="consolidation" if config.agents.consolidation.model else None,
     )
 
     # Set cron callback (needs agent)
@@ -529,6 +562,7 @@ def agent(
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         routing_config=config.agents.routing if config.agents.routing.models else None,
+        consolidation_model="consolidation" if config.agents.consolidation.model else None,
     )
 
     # Show spinner when logs are off (no output to miss); skip when logs are on
