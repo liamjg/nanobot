@@ -254,22 +254,17 @@ def _make_route_provider(config: Config):
     for name, endpoint in routing.models.items():
         if endpoint.provider not in providers_seen:
             p_config = getattr(config.providers, endpoint.provider, None)
-            if not p_config or not p_config.api_key:
-                logger.warning(
-                    "Model '{}' references provider '{}' with no API key, skipping",
-                    name, endpoint.provider,
-                )
-                continue
-            api_base = p_config.api_base
+            api_key = (p_config and p_config.api_key) or ""
+            api_base = (p_config and p_config.api_base) or None
             if not api_base:
                 spec = find_by_name(endpoint.provider)
                 if spec and spec.is_gateway and spec.default_api_base:
                     api_base = spec.default_api_base
             routed_provider = LiteLLMProvider(
-                api_key=p_config.api_key,
+                api_key=api_key,
                 api_base=api_base,
                 default_model=endpoint.model,
-                extra_headers=p_config.extra_headers,
+                extra_headers=(p_config and p_config.extra_headers),
                 provider_name=endpoint.provider,
             )
             idx = len(provider_list)
@@ -290,10 +285,7 @@ def _make_route_provider(config: Config):
             route_overrides[name] = overrides
 
     if not routes:
-        console.print("[red]Error: No valid model endpoints resolved from routing.models.[/red]")
-        raise typer.Exit(1)
-    if "default" not in routes:
-        console.print("[red]Error: 'default' model provider has no API key configured.[/red]")
+        console.print("[red]Error: No models configured in routing section.[/red]")
         raise typer.Exit(1)
 
     return RouterProvider(
