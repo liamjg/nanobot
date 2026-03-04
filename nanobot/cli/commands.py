@@ -230,7 +230,7 @@ def _get_effective_model(config: Config) -> str:
     if "default" not in config.agents.routing.models:
         console.print("[red]Error: routing.models must include a 'default' entry.[/red]")
         raise typer.Exit(1)
-    return "hint:default"
+    return "default"
 
 
 def _make_provider(config: Config):
@@ -296,7 +296,7 @@ def _make_route_provider(config: Config):
     return RouterProvider(
         providers=provider_list,
         routes=routes,
-        default_model="hint:default",
+        default_model="default",
         route_overrides=route_overrides,
     )
 

@@ -179,7 +179,7 @@ class AgentLoop:
         model_name = classify(self.routing_config, user_message)
         if model_name:
             logger.info("Classified message -> model='{}', length={}", model_name, len(user_message))
-            return f"hint:{model_name}"
+            return model_name
         return self.model
 
     async def _run_agent_loop(
