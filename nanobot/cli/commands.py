@@ -198,11 +198,23 @@ def onboard():
 
 
 
+def _get_effective_model(config: Config) -> str:
+    if config.routing.models:
+        if "default" not in config.routing.models:
+            console.print("[red]Error: routing.models must include a 'default' entry.[/red]")
+            raise typer.Exit(1)
+        return "hint:default"
+    return config.agents.defaults.model
+
+
 def _make_provider(config: Config):
     """Create the appropriate LLM provider from config."""
     from nanobot.providers.custom_provider import CustomProvider
     from nanobot.providers.litellm_provider import LiteLLMProvider
     from nanobot.providers.openai_codex_provider import OpenAICodexProvider
+
+    if config.routing.models:
+        return _make_route_provider(config)
 
     model = config.agents.defaults.model
     provider_name = config.get_provider_name(model)
@@ -233,6 +245,64 @@ def _make_provider(config: Config):
         default_model=model,
         extra_headers=p.extra_headers if p else None,
         provider_name=provider_name,
+    )
+
+
+def _make_route_provider(config: Config):
+    from loguru import logger
+
+    from nanobot.providers.litellm_provider import LiteLLMProvider
+    from nanobot.providers.router_provider import RouterProvider
+
+    routing = config.routing
+    providers_seen: dict[str, int] = {}
+    provider_list: list[tuple[str, object]] = []
+    routes: dict[str, tuple[int, str]] = {}
+    route_overrides: dict[str, dict] = {}
+
+    for name, endpoint in routing.models.items():
+        if endpoint.provider not in providers_seen:
+            p_config = getattr(config.providers, endpoint.provider, None)
+            if not p_config or not p_config.api_key:
+                logger.warning(
+                    "Model '{}' references provider '{}' with no API key, skipping",
+                    name, endpoint.provider,
+                )
+                continue
+            routed_provider = LiteLLMProvider(
+                api_key=p_config.api_key,
+                api_base=p_config.api_base or config.get_api_base(endpoint.model),
+                default_model=endpoint.model,
+                extra_headers=p_config.extra_headers,
+                provider_name=endpoint.provider,
+            )
+            idx = len(provider_list)
+            providers_seen[endpoint.provider] = idx
+            provider_list.append((endpoint.provider, routed_provider))
+        else:
+            idx = providers_seen[endpoint.provider]
+
+        routes[name] = (idx, endpoint.model)
+
+        overrides = {}
+        if endpoint.max_tokens is not None:
+            overrides["max_tokens"] = endpoint.max_tokens
+        if endpoint.temperature is not None:
+            overrides["temperature"] = endpoint.temperature
+        if endpoint.reasoning_effort is not None:
+            overrides["reasoning_effort"] = endpoint.reasoning_effort
+        if overrides:
+            route_overrides[name] = overrides
+
+    if not routes:
+        console.print("[red]Error: No valid model endpoints resolved from routing.models.[/red]")
+        raise typer.Exit(1)
+
+    return RouterProvider(
+        providers=provider_list,
+        routes=routes,
+        default_model="hint:default",
+        route_overrides=route_overrides,
     )
 
 
@@ -277,7 +347,7 @@ def gateway(
         bus=bus,
         provider=provider,
         workspace=config.workspace_path,
-        model=config.agents.defaults.model,
+        model=_get_effective_model(config),
         temperature=config.agents.defaults.temperature,
         max_tokens=config.agents.defaults.max_tokens,
         max_iterations=config.agents.defaults.max_tool_iterations,
@@ -291,6 +361,7 @@ def gateway(
         session_manager=session_manager,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
+        routing_config=config.routing if config.routing.models else None,
     )
 
     # Set cron callback (needs agent)
@@ -460,7 +531,7 @@ def agent(
         bus=bus,
         provider=provider,
         workspace=config.workspace_path,
-        model=config.agents.defaults.model,
+        model=_get_effective_model(config),
         temperature=config.agents.defaults.temperature,
         max_tokens=config.agents.defaults.max_tokens,
         max_iterations=config.agents.defaults.max_tool_iterations,
@@ -473,6 +544,7 @@ def agent(
         restrict_to_workspace=config.tools.restrict_to_workspace,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
+        routing_config=config.routing if config.routing.models else None,
     )
 
     # Show spinner when logs are off (no output to miss); skip when logs are on

@@ -236,6 +236,31 @@ class AgentsConfig(Base):
     defaults: AgentDefaults = Field(default_factory=AgentDefaults)
 
 
+class ModelEndpoint(Base):
+    provider: str
+    model: str
+    max_tokens: int | None = None
+    temperature: float | None = None
+    reasoning_effort: str | None = None
+
+
+class RoutingCondition(Base):
+    keywords: list[str] = Field(default_factory=list)
+    patterns: list[str] = Field(default_factory=list)
+    min_length: int | None = None
+    max_length: int | None = None
+
+
+class RoutingRule(Base):
+    use: str
+    when: RoutingCondition
+
+
+class RoutingConfig(Base):
+    models: dict[str, ModelEndpoint] = Field(default_factory=dict)
+    rules: list[RoutingRule] = Field(default_factory=list)
+
+
 class ProviderConfig(Base):
     """LLM provider configuration."""
 
@@ -330,6 +355,7 @@ class Config(BaseSettings):
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
 
     @property
     def workspace_path(self) -> Path:
